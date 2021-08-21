@@ -1,4 +1,4 @@
-baseURL = 'http://example.org/'
+baseURL = 'https://reddocmd.github.io/hugo-site'
 languageCode = 'en-us'
 title = 'Google Summer of Code 2021'
 theme = "book"

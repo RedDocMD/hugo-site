@@ -1,0 +1,4 @@
+baseURL = 'http://example.org/'
+languageCode = 'en-us'
+title = 'Google Summer of Code 2021'
+theme = "book"

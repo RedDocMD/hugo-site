@@ -1,0 +1,288 @@
+<!doctype html><html lang=en dir=ltr>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=description content="Making Smart Pointer Checkers default checkers in the Static Analyzer #  Overview #  This project aims to complete the SmartPtrChecker and thus SmartPtrModeling checkers to detect null-dereferences of the std::unique_ptr. This is a continuation of the GSoC 2020 project in the same area.
+Description #  SmartPtrChecker used to be a checker in the Clang Static Analyzer for detecting &ldquo;simple&rdquo; null dereferences. The GSoC 2020 project improved upon this to provide the SmartPtrModeling checker, which models many of the important operations on std::unique_ptr, such as move, reset, release, convert to bool, etc.">
+<meta name=theme-color content="#FFFFFF"><meta property="og:title" content="Final Report">
+<meta property="og:description" content="Making Smart Pointer Checkers default checkers in the Static Analyzer #  Overview #  This project aims to complete the SmartPtrChecker and thus SmartPtrModeling checkers to detect null-dereferences of the std::unique_ptr. This is a continuation of the GSoC 2020 project in the same area.
+Description #  SmartPtrChecker used to be a checker in the Clang Static Analyzer for detecting &ldquo;simple&rdquo; null dereferences. The GSoC 2020 project improved upon this to provide the SmartPtrModeling checker, which models many of the important operations on std::unique_ptr, such as move, reset, release, convert to bool, etc.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="http://example.org/docs/report/"><meta property="article:section" content="docs">
+<meta property="article:published_time" content="2021-08-21T09:15:00+05:30">
+<meta property="article:modified_time" content="2021-08-21T09:15:00+05:30">
+<title>Final Report | Google Summer of Code 2021</title>
+<link rel=manifest href=/manifest.json>
+<link rel=icon href=/favicon.png type=image/x-icon>
+<link rel=stylesheet href=/book.min.8599444fcc48ee6b435b5b62c955ab7d914fa1e2a453df90c4b97cc9769665d1.css integrity="sha256-hZlET8xI7mtDW1tiyVWrfZFPoeKkU9+QxLl8yXaWZdE=" crossorigin=anonymous>
+<script defer src=/flexsearch.min.js></script>
+<script defer src=/en.search.min.fcc64456189336ae62d91d69b046869094f822fe08dd4e591a6074223b26563b.js integrity="sha256-/MZEVhiTNq5i2R1psEaGkJT4Iv4I3U5ZGmB0IjsmVjs=" crossorigin=anonymous></script>
+</head>
+<body dir=ltr>
+<input type=checkbox class="hidden toggle" id=menu-control>
+<input type=checkbox class="hidden toggle" id=toc-control>
+<main class="container flex">
+<aside class=book-menu>
+<div class=book-menu-content>
+<nav>
+<h2 class=book-brand>
+<a class="flex align-center" href=/><span>Google Summer of Code 2021</span>
+</a>
+</h2>
+<div class=book-search>
+<input type=text id=book-search-input placeholder=Search aria-label=Search maxlength=64 data-hotkeys=s/>
+<div class="book-search-spinner hidden"></div>
+<ul id=book-search-results></ul>
+</div>
+<ul>
+<li>
+<a href=http://example.org/docs/report/ class=active>Final Report</a>
+</li>
+</ul>
+</nav>
+<script>(function(){var a=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(b){localStorage.setItem("menu.scrollTop",a.scrollTop)}),a.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+</div>
+</aside>
+<div class=book-page>
+<header class=book-header>
+<div class="flex align-center justify-between">
+<label for=menu-control>
+<img src=/svg/menu.svg class=book-icon alt=Menu>
+</label>
+<strong>Final Report</strong>
+<label for=toc-control>
+<img src=/svg/toc.svg class=book-icon alt="Table of Contents">
+</label>
+</div>
+<aside class="hidden clearfix">
+<nav id=TableOfContents>
+<ul>
+<li><a href=#overview>Overview</a></li>
+<li><a href=#description>Description</a></li>
+<li><a href=#revisions>Revisions</a>
+<ul>
+<li><a href=#model-comparision-methods-of-stdunique_ptr>Model comparision methods of <code>std::unique_ptr</code></a></li>
+<li><a href=#model-stdswap-specialization-for-stdunique_ptr>Model <code>std::swap</code> specialization for <code>std::unique_ptr</code></a></li>
+<li><a href=#model--operator-specialization-for-stdunique_ptr>Model <code>&lt;&lt;</code> operator specialization for <code>std::unique_ptr</code></a></li>
+<li><a href=#model-stdmake_unique-and-cousins>Model <code>std::make_unique</code> and cousins</a></li>
+<li><a href=#fix-for-faulty-namespace-test-and-add-flag-checking>Fix for faulty namespace test and add flag checking</a></li>
+<li><a href=#add-option-to-satestpy-for-extra-checkers>Add option to <code>SATest.py</code> for extra checkers</a></li>
+<li><a href=#model-destructor-for-stdunique_ptr>Model destructor for <code>std::unique_ptr</code></a></li>
+</ul>
+</li>
+<li><a href=#results>Results</a>
+<ul>
+<li><a href=#projects-in-clangutilsanalyzerprojects>Projects in <code>clang/utils/analyzer/projects</code></a></li>
+<li><a href=#webkit>Webkit</a></li>
+</ul>
+</li>
+<li><a href=#future-work>Future Work</a></li>
+<li><a href=#running-the-code>Running the code</a></li>
+<li><a href=#acknowledgement>Acknowledgement</a></li>
+</ul>
+</nav>
+</aside>
+</header>
+<article class=markdown><h1 id=making-smart-pointer-checkers-default-checkers-in-the-static-analyzer>
+Making Smart Pointer Checkers default checkers in the Static Analyzer
+<a class=anchor href=#making-smart-pointer-checkers-default-checkers-in-the-static-analyzer>#</a>
+</h1>
+<h2 id=overview>
+Overview
+<a class=anchor href=#overview>#</a>
+</h2>
+<p>This project aims to complete the <code>SmartPtrChecker</code> and thus <code>SmartPtrModeling</code> checkers to detect null-dereferences of the <code>std::unique_ptr</code>. This is a continuation of the GSoC 2020 <a href=https://docs.google.com/document/d/1WZSt45kZUhg0UbOv0HXBhyEYaHrb-G-TpEhj_nU041Q/edit>project</a> in the same area.</p>
+<h2 id=description>
+Description
+<a class=anchor href=#description>#</a>
+</h2>
+<p><code>SmartPtrChecker</code> used to be a checker in the Clang Static Analyzer for detecting &ldquo;simple&rdquo; null dereferences. The GSoC 2020 project improved upon this to provide the <code>SmartPtrModeling</code> checker, which models many of the important operations on <code>std::unique_ptr</code>, such as move, reset, release, convert to bool, etc. This project completes most of the gaps and uncompleted areas in the modelling, including the ubiquitous <code>std::make_unique</code> function and the destructor (which communicates with the <code>MallocChecker</code> to remove false positives). <em>Currently, we are a few bug fixes and some polishing away from making this a default checker</em> (as of Clang 13, it is an alpha checker).</p>
+<h2 id=revisions>
+Revisions
+<a class=anchor href=#revisions>#</a>
+</h2>
+<p>One aim of this project was to make sure that no method defined on <code>std::unique_ptr</code> is left un-modelled. If we don&rsquo;t, CSA either does:</p>
+<ul>
+<li><em>Conservative evaluation</em>, which leads to loss of information and possibly warnings being suppressed</li>
+<li><em>Inlining</em>, which sometimes leads the CSA to falsely believe that there is a bug in the standard library code (because we have modelled parts of it and are inlining other parts). Since bugs in standard library code are normally suppressed, this leads to other bugs beings suppressed (false-negatives). For example:</li>
+</ul>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-cpp data-lang=cpp><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>foo</span>() {
+    <span style=color:#66d9ef>auto</span> smart <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>unique_ptr<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;</span>(<span style=color:#66d9ef>new</span> <span style=color:#66d9ef>int</span>(<span style=color:#ae81ff>13</span>));
+    <span style=color:#66d9ef>auto</span> raw <span style=color:#f92672>=</span> <span style=color:#66d9ef>new</span> <span style=color:#66d9ef>int</span>(<span style=color:#ae81ff>29</span>);
+    <span style=color:#75715e>// There is a leak here.
+</span><span style=color:#75715e></span>}
+</code></pre></div><p>Without <a href=https://reviews.llvm.org/D105821>D105821</a>, this used to have <strong>no</strong> leak warning. The inlining of the destructor of <code>std::unique_ptr</code> led the CSA to falsely believe there was a bug in the destructor code.</p>
+<h3 id=model-comparision-methods-of-stdunique_ptr>
+Model comparision methods of <code>std::unique_ptr</code>
+<a class=anchor href=#model-comparision-methods-of-stdunique_ptr>#</a>
+</h3>
+<p><a href=https://reviews.llvm.org/D104616>D104616</a> introduces modelling of comparision operator overloads of <code>std::unique_ptr</code>. It leverages the <code>SValBuilder::evalBinOp</code> to evaluate the result of the operator. More importantly, it attempts to perform a <strong>state-split</strong> if it is possible.</p>
+<h3 id=model-stdswap-specialization-for-stdunique_ptr>
+Model <code>std::swap</code> specialization for <code>std::unique_ptr</code>
+<a class=anchor href=#model-stdswap-specialization-for-stdunique_ptr>#</a>
+</h3>
+<p><a href=https://reviews.llvm.org/D104300>D104300</a> models the <code>std::swap</code> specialization for <code>std::unique_ptr</code>. There is an existing <code>swap</code> method on <code>std::unique_ptr</code>, which performs roughly the same thing. Thus, the common code is refactored out and both methods are handled exactly the same way.</p>
+<p><img src=assets/std-swap.png alt=std-swap></p>
+<h3 id=model--operator-specialization-for-stdunique_ptr>
+Model <code>&lt;&lt;</code> operator specialization for <code>std::unique_ptr</code>
+<a class=anchor href=#model--operator-specialization-for-stdunique_ptr>#</a>
+</h3>
+<p><a href=https://reviews.llvm.org/D105421>D105421</a> models the <code>&lt;&lt;</code> operator specialization for <code>std::unique_ptr</code>. There is not that much modelling required for this method, other than invalidating the stream region.</p>
+<h3 id=model-stdmake_unique-and-cousins>
+Model <code>std::make_unique</code> and cousins
+<a class=anchor href=#model-stdmake_unique-and-cousins>#</a>
+</h3>
+<p><a href=https://reviews.llvm.org/D103750>D103750</a> models the quintessential <code>std::make_unique</code> function. In this entire checker, we only account for <code>unique_ptr</code> containing pointers, not arrays - we do the same here as well. The crux of this patch is informing the CSA that we are constructing an object via this function. Ideally this should be handled automatically (as it is for constructors). But here we bail out and simply call <code>ExprEngine::updateObjectsUnderConstruction</code>. Also we ensure that the <code>ProgramState</code> knows that we have a non-null inner pointer in the <code>unique_ptr</code>.</p>
+<h3 id=fix-for-faulty-namespace-test-and-add-flag-checking>
+Fix for faulty namespace test and add flag checking
+<a class=anchor href=#fix-for-faulty-namespace-test-and-add-flag-checking>#</a>
+</h3>
+<p><a href=https://reviews.llvm.org/D106296>D106296</a> prevents a crash we encountered by handling the case where we do not have the declaration of a function and so cannot know its namespace. Also we add the <code>ModelSmartPtrDereference</code> flag check to the previously modelled functions.</p>
+<h3 id=add-option-to-satestpy-for-extra-checkers>
+Add option to <code>SATest.py</code> for extra checkers
+<a class=anchor href=#add-option-to-satestpy-for-extra-checkers>#</a>
+</h3>
+<p><a href=https://reviews.llvm.org/D106739>D106739</a> augments the functionality of the <code>SATest.py</code> script. This script runs the CSA on the projects in the <code>clang/utils/analyzer/projects</code> directory (via a Docker image). By default, the script runs the CSA with only default checkers enabled. This patch adds a flag to enable extra checkers (for our case, the <code>SmartPtrChecker</code>), enabling us to conveniently run test our patches.</p>
+<h3 id=model-destructor-for-stdunique_ptr>
+Model destructor for <code>std::unique_ptr</code>
+<a class=anchor href=#model-destructor-for-stdunique_ptr>#</a>
+</h3>
+<p><a href=https://reviews.llvm.org/D105821>D105821</a> models the elephant in the room - the destructor for <code>std::unique_ptr</code>. Although we are just modelling the destructor in this patch, in reality, we have ended up calling the <code>MallocChecker</code> and improving the invalidation scheme in addition to the modelling. We are doing the following steps:</p>
+<ul>
+<li>Enable calling <code>evalCall</code> for destructor-calls (before this patch, only the <code>defaultEvalCall</code> is run)</li>
+<li>Escape inner pointer on construction and reset</li>
+<li>Escape all reachable symbols in <code>checkRegionChange</code></li>
+<li><em>Invalidate</em> the inner pointer and remove it from <code>TrackedRegionMap</code> (in both destructor and in reset)</li>
+</ul>
+<p>The fuss about <em>invalidation</em> of inner pointer stems from the fact that <code>delete</code> also calls the <em>member destructor</em> (if it exists). Consider the following class:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-cpp data-lang=cpp><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>LameVector</span> {
+    size_t sz <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+    size_t cap <span style=color:#f92672>=</span> <span style=color:#ae81ff>4</span>;
+    size_t el_sz <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+    <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>buf;
+
+<span style=color:#66d9ef>public</span><span style=color:#f92672>:</span>
+    LameVector() <span style=color:#f92672>:</span> buf{<span style=color:#66d9ef>new</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>char</span>[cap]} {}
+    <span style=color:#f92672>~</span>LameVector() { <span style=color:#66d9ef>delete</span>[] buf; }
+};
+
+<span style=color:#66d9ef>void</span> <span style=color:#a6e22e>foo</span>() {
+    <span style=color:#66d9ef>auto</span> ptr <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>make_unique<span style=color:#f92672>&lt;</span>LameVector<span style=color:#f92672>&gt;</span>();
+}
+</code></pre></div><p>In this code, <code>LameVector</code> contains an inner pointer, which is freed in its destructor. If we do not invalidate this inner pointer, CSA will think <code>LameVector</code> and hence <code>ptr</code> leaks memory.</p>
+<p>This is a stop gap measure and it seems to work for the time being. The proper solution is to inline both the member constructor (both during constructor calls and during <code>make_unique</code>) and the member destructor. But we don&rsquo;t yet have a mechanism to &ldquo;evaluate&rdquo; functions from a checker.</p>
+<h2 id=results>
+Results
+<a class=anchor href=#results>#</a>
+</h2>
+<p>We have two sources of test projects to run:- <a href=https://github.com/llvm/llvm-project/tree/main/clang/utils/analyzer/projects>projects</a> in the <code>clang/utils/analyzer/projects</code> directory and <a href=https://github.com/WebKit/WebKit>Webkit</a>. We evaluated checker performance by:</p>
+<ul>
+<li>Running scan-build with and without the patches from this project</li>
+<li>Running scan-build with <code>SmartPtrChecker</code> enabled and disabled</li>
+</ul>
+<h3 id=projects-in-clangutilsanalyzerprojects>
+Projects in <code>clang/utils/analyzer/projects</code>
+<a class=anchor href=#projects-in-clangutilsanalyzerprojects>#</a>
+</h3>
+<ul>
+<li>
+<p>On running with and without the patches of this project, <strong>no warnings were added or removed</strong>. This is somewhat expected since the main false warnings expected to be fixed are from the <code>MallocChecker</code>. This effect is cancelled by the suppressed error detected during inlining of <code>std::unique_ptr</code> destructor.</p>
+</li>
+<li>
+<p>On running with <code>SmartPtrChecker</code> enabled and disabled, <strong>some warnings were added, many were removed</strong>. The warnings removed were almost all false memory-leak warnings due to the lack of modelling. (<code>drogon</code>, <code>fmt</code>, <code>re2</code>, <code>faiss</code>). <code>oatpp</code> had some &ldquo;C++ move semantics&rdquo; warnings removed, because <code>std::unique_ptr</code> or <code>srd::shared_ptr</code> is perfectly usable and valid after a move. Some warnings were added to <code>duckdb</code>, <code>drogon</code> and <code>re2</code>, all due to custom &ldquo;smart pointers&rdquo; in the codebase.</p>
+</li>
+</ul>
+<h3 id=webkit>
+Webkit
+<a class=anchor href=#webkit>#</a>
+</h3>
+<ul>
+<li>
+<p>On running with and without the patches of this project, about <strong>250</strong> false memory leaks warnings were removed. As for null-dereference warnings, <strong>6</strong> were removed and <strong>6</strong> added. The ones removed is a question for further investigation.</p>
+</li>
+<li>
+<p>On running with <code>SmartPtrChecker</code> enabled and disabled, about <strong>90</strong> null smart pointer dereference warnings are emitted (including 3 out the 4 mentioned in previous year&rsquo;s report, the fourth was not emitted due to the code being removed). <em>There are still some false positives</em>. These will be areas to look at before declaring that we have a stable checker.</p>
+</li>
+</ul>
+<p><img src=assets/new-webkit.png alt=WebkitBug></p>
+<h2 id=future-work>
+Future Work
+<a class=anchor href=#future-work>#</a>
+</h2>
+<ul>
+<li><strong>Inlined defensive checks</strong>: This is a class of false-positives with a really misleading note.</li>
+</ul>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-cpp data-lang=cpp><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>foo</span>(std<span style=color:#f92672>::</span>unique_ptr<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;</span> <span style=color:#f92672>&amp;</span>P) {
+    <span style=color:#66d9ef>if</span> (P) {}
+}
+
+<span style=color:#66d9ef>int</span> <span style=color:#a6e22e>bar</span>(std<span style=color:#f92672>::</span>unique_ptr<span style=color:#f92672>&lt;</span><span style=color:#66d9ef>int</span><span style=color:#f92672>&gt;</span> Q) {
+    foo(Q);
+    <span style=color:#66d9ef>return</span> <span style=color:#f92672>*</span>Q; <span style=color:#75715e>// warning: null dereference
+</span><span style=color:#75715e></span>}
+</code></pre></div><p>The problem is that <code>foo(Q)</code> creates a state split. But CSA uses the state split in <code>foo</code> to conclude in <code>bar()</code> that there exists a path in which <code>Q</code> is null and there is a dereference. We need to make sure that state-splits in other functions don&rsquo;t lead to misleading diagnostics.</p>
+<ul>
+<li>
+<p><strong>Polish and commit <a href=https://reviews.llvm.org/D105821>D105821</a></strong>: This patch has become too bulky and probably needs to be split into two at least (one part for the destructor and the other part for the pointer escape). Also they need <em>tests</em>!</p>
+</li>
+<li>
+<p><strong>Enable the checker by default</strong>: Once the previous two tasks are done and the remaining bugs uncovered by WebKit fixed, we can make it a default checker. 😃</p>
+</li>
+<li>
+<p><strong>Model <code>std::shared_ptr</code> and <code>std::weak_ptr</code></strong>: These two can be modelled in a manner similar to <code>std::unique_ptr</code>, ie, with the <code>TrackedRegionMap</code>. In addition, these smart pointers need a <em>ref count</em> to be stored in the GDM. A discussion on how to do this can be found in my GSoC <a href="https://docs.google.com/document/d/1DlU7Whg33qAp3wHBdAcGvl8VE2gfslaGBc-GRb_CNjk/edit?usp=sharing">proposal</a>.</p>
+</li>
+</ul>
+<h2 id=running-the-code>
+Running the code
+<a class=anchor href=#running-the-code>#</a>
+</h2>
+<p>To run the CSA with <code>SmartPtrChecker</code> enabled:</p>
+<div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-shell data-lang=shell>&lt;path-to-scan-build&gt; -o . -enable-checker alpha.cplusplus.SmartPtr -analyzer-config cplusplus.SmartPtrModeling:ModelSmartPtrDereference<span style=color:#f92672>=</span>true clang++ -c &lt;filename&gt;
+</code></pre></div><h2 id=acknowledgement>
+Acknowledgement
+<a class=anchor href=#acknowledgement>#</a>
+</h2>
+<p>I would like to express my sincere gratitude towards my four mentors - <strong>Artem Dergachev</strong>, <strong>Valeriy Savchenko</strong>, <strong>Gábor Horváth</strong> and <strong>Raphael Isemann</strong>. They helped me tirelessly throughout the GSoC period, quickly responding to my emails, reviewing my patches and giving advice. They were available for long hours of Skype calls, at often awkward times for them (due to time zone differences). It was a fun three months of learning, coding, struggling, hacking and doing something, perhaps, meaningful.</p>
+</article>
+<footer class=book-footer>
+<div class="flex flex-wrap justify-between">
+</div>
+<script>(function(){function a(c){const a=window.getSelection(),b=document.createRange();b.selectNodeContents(c),a.removeAllRanges(),a.addRange(b)}document.querySelectorAll("pre code").forEach(b=>{b.addEventListener("click",function(c){a(b.parentElement),navigator.clipboard&&navigator.clipboard.writeText(b.parentElement.textContent)})})})()</script>
+</footer>
+<div class=book-comments>
+</div>
+<label for=menu-control class="hidden book-menu-overlay"></label>
+</div>
+<aside class=book-toc>
+<div class=book-toc-content>
+<nav id=TableOfContents>
+<ul>
+<li><a href=#overview>Overview</a></li>
+<li><a href=#description>Description</a></li>
+<li><a href=#revisions>Revisions</a>
+<ul>
+<li><a href=#model-comparision-methods-of-stdunique_ptr>Model comparision methods of <code>std::unique_ptr</code></a></li>
+<li><a href=#model-stdswap-specialization-for-stdunique_ptr>Model <code>std::swap</code> specialization for <code>std::unique_ptr</code></a></li>
+<li><a href=#model--operator-specialization-for-stdunique_ptr>Model <code>&lt;&lt;</code> operator specialization for <code>std::unique_ptr</code></a></li>
+<li><a href=#model-stdmake_unique-and-cousins>Model <code>std::make_unique</code> and cousins</a></li>
+<li><a href=#fix-for-faulty-namespace-test-and-add-flag-checking>Fix for faulty namespace test and add flag checking</a></li>
+<li><a href=#add-option-to-satestpy-for-extra-checkers>Add option to <code>SATest.py</code> for extra checkers</a></li>
+<li><a href=#model-destructor-for-stdunique_ptr>Model destructor for <code>std::unique_ptr</code></a></li>
+</ul>
+</li>
+<li><a href=#results>Results</a>
+<ul>
+<li><a href=#projects-in-clangutilsanalyzerprojects>Projects in <code>clang/utils/analyzer/projects</code></a></li>
+<li><a href=#webkit>Webkit</a></li>
+</ul>
+</li>
+<li><a href=#future-work>Future Work</a></li>
+<li><a href=#running-the-code>Running the code</a></li>
+<li><a href=#acknowledgement>Acknowledgement</a></li>
+</ul>
+</nav>
+</div>
+</aside>
+</main>
+</body>
+</html>
